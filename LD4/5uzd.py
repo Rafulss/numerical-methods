@@ -1,63 +1,146 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.linalg import eigh_tridiagonal
 
-# Funkcija, kas atgriež pirmās 5 īpašvērtības dotajam N un xi_max
+
 def calculate_eigenvalues(N, xi_max):
-    i = np.linspace(-N, N, 2 * N + 1)
-    xi = i * xi_max / N
-    d_xi = xi_max / N
-    
-    xi_int = xi[1:-1]
-    n_int = len(xi_int)
-    
-    H = np.zeros((n_int, n_int))
-    diag_val = 1.0 / (d_xi ** 2) + 0.5 * (xi_int ** 2)
-    off_diag_val = -1.0 / (2.0 * d_xi ** 2)
-    
-    np.fill_diagonal(H, diag_val)
-    np.fill_diagonal(H[1:], off_diag_val)
-    np.fill_diagonal(H[:, 1:], off_diag_val)
-    
-    eigenvalues, _ = np.linalg.eigh(H)
-    return eigenvalues[:5]
+    h = xi_max / N
 
-# --- 1. Pētām atkarību no parametra xi_max (fiksēts N = 100) ---
-N_fixed = 100
-xi_max_values = np.linspace(2.0, 10.0, 30)
-energies_vs_ximax = np.zeros((len(xi_max_values), 5))
+    # Iekšējie punkti; galapunktos psi = 0
+    xi_inner = np.arange(-N + 1, N) * h
+    M = len(xi_inner)  # Nezināmo skaits: 2N - 1
 
-for idx, xmax in enumerate(xi_max_values):
-    energies_vs_ximax[idx, :] = calculate_eigenvalues(N_fixed, xmax)
+    # Tā pati Hamiltona matrica kā 4. uzdevumā,
+    # tikai glabājam galveno un blakus diagonāli.
+    diagonal = 1.0 / h**2 + xi_inner**2 / 2.0
+    off_diagonal = np.full(M - 1, -1.0 / (2.0 * h**2))
 
-# Teorētiskās vērtības harmoniskajam oscilatoram: epsilon_n = n + 0.5 (n = 0, 1, 2, 3, 4)
-# Teorētiskās: 0.5, 1.5, 2.5, 3.5, 4.5
+    # Aprēķinām tikai piecas mazākās īpašvērtības.
+    return eigh_tridiagonal(
+        diagonal,
+        off_diagonal,
+        eigvals_only=True,
+        select="i",
+        select_range=(0, 4)
+    )
 
-plt.figure(figsize=(10, 5))
+
+# Precīzās pirmās piecas bezdimensiju īpašenerģijas
+exact_energies = np.arange(5) + 0.5
+
+# 3. un 4. uzdevumā izmantotie parametri
+N_check = 1000
+xi_max_check = 5.0
+
+energies_check = calculate_eigenvalues(N_check, xi_max_check)
+errors_check = np.abs(energies_check - exact_energies)
+
+
+# 1. Mainām N, fiksējot xi_max = 5
+N_i = np.arange(10, 1001, 10)  # N = 10, 20, ..., 1000
+xi_max_fix = xi_max_check
+
+energies_N = np.array([
+    calculate_eigenvalues(int(N), xi_max_fix)
+    for N in N_i
+])
+
+errors_N = np.abs(energies_N - exact_energies)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
 for n in range(5):
-    plt.plot(xi_max_values, energies_vs_ximax[:, n], label=f'$\\epsilon_{n}$ (skaitliski)')
-plt.axhline(0.5, color='gray', linestyle='--', alpha=0.5)
-plt.axhline(4.5, color='gray', linestyle='--', alpha=0.5, label='Teorētiskās robežas')
-plt.title(f'Enerģiju atkarība no $\\xi_{max}$ (pie fiksēta $N = {N_fixed}$)')
-plt.xlabel('$\\xi_{max}$')
-plt.ylabel('Īpašenerģija $\\epsilon$')
-plt.legend()
-plt.grid(True)
-plt.show()
+    ax.semilogy(
+        N_i,
+        errors_N[:, n],
+        "o-",
+        markersize=3,
+        label=f"n = {n}"
+    )
 
-# --- 2. Pētām atkarību no parametra N (fiksēts xi_max = 6.0) ---
-xi_max_fixed = 6.0
-N_values = np.arange(20, 200, 10)
-energies_vs_N = np.zeros((len(N_values), 5))
+ax.set_xlabel(r"$N$")
+ax.set_ylabel(r"$|\varepsilon_n-(n+1/2)|$")
+ax.set_title(
+    rf"Enerģiju kļūdas atkarībā no $N$, "
+    rf"$\xi_{{\max}}={xi_max_fix:g}$"
+)
 
-for idx, n_pts in enumerate(N_values):
-    energies_vs_N[idx, :] = calculate_eigenvalues(n_pts, xi_max_fixed)
+ax.set_xlim(0, 1050)
+ax.set_xticks(np.arange(0, 1001, 100))
+ax.legend()
+ax.grid()
 
-plt.figure(figsize=(10, 5))
+fig.tight_layout()
+
+
+# 2. Mainām xi_max, fiksējot N = 1000
+xi_max_i = np.linspace(1.0, 10.0, 91)
+N_fix = N_check
+
+energies_xi = np.array([
+    calculate_eigenvalues(N_fix, xi_max)
+    for xi_max in xi_max_i
+])
+
+errors_xi = np.abs(energies_xi - exact_energies)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
 for n in range(5):
-    plt.plot(N_values, energies_vs_N[:, n], marker='o', markersize=3, label=f'$\\epsilon_{n}$')
-plt.title(f'Enerģiju konverģence atkarībā no $N$ (pie fiksēta $\\xi_{max} = {xi_max_fixed}$)')
-plt.xlabel('Režģa parametrs $N$')
-plt.ylabel('Īpašenerģija $\\epsilon$')
-plt.legend()
-plt.grid(True)
+    ax.semilogy(
+        xi_max_i,
+        errors_xi[:, n],
+        "o-",
+        markersize=3,
+        label=f"n = {n}"
+    )
+
+ax.set_xlabel(r"$\xi_{\max}$")
+ax.set_ylabel(r"$|\varepsilon_n-(n+1/2)|$")
+ax.set_title(
+    rf"Enerģiju kļūdas atkarībā no $\xi_{{\max}}$, "
+    rf"$N={N_fix}$"
+)
+
+ax.legend()
+ax.grid()
+
+fig.tight_layout()
+
+
+# 3. Papildu konverģences pārbaude
+
+# Samazinām režģa soli divas reizes, saglabājot intervālu.
+energies_finer = calculate_eigenvalues(2000, 5.0)
+
+# Paplašinām intervālu, saglabājot režģa soli h = 0.005.
+energies_wider = calculate_eigenvalues(1200, 6.0)
+
+change_N = np.abs(energies_finer - energies_check)
+change_interval = np.abs(energies_wider - energies_check)
+
+
+# 4. Izvadām aprēķinātās enerģijas un kļūdas
+print(f"\nN = {N_check}, xi_max = {xi_max_check:g}")
+print("n    Aprēķinātā enerģija    Precīzā enerģija    Absolūtā kļūda")
+
+for n in range(5):
+    print(
+        f"{n}    {energies_check[n]:.10f}            "
+        f"{exact_energies[n]:.1f}                "
+        f"{errors_check[n]:.3e}"
+    )
+
+print("\nKonverģences pārbaude")
+print("n    Absolūtā kļūda    Izmaiņa, N=2000    Izmaiņa, xi_max=6")
+
+for n in range(5):
+    print(
+        f"{n}    {errors_check[n]:.3e}          "
+        f"{change_N[n]:.3e}            "
+        f"{change_interval[n]:.3e}"
+    )
+
+
+# Parādām abus grafikus.
 plt.show()

@@ -1,52 +1,68 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 1. Parametru definēšana
-N = 100       
-xi_max = 10
+N = 1000
+xi_max = 5
 
-# 2. Režģa izveide
-i_vals = np.arange(-N, N + 1)
-dxi = xi_max / N
-xi = i_vals * dxi
+i = np.linspace(-N, N, 2*N+1) #norādu cik daudz vērtības gribu
+xi_i = i * xi_max / N  #definēju koordinātas
 
-# 3. Matricas H izveide un aizpildīšana
-dim = 2 * N + 1
-H = np.zeros((dim, dim))
-coeff = 1.0 / (dxi ** 2)
+# definējam xi bez gala punktiem, jo tur psi=0
+xi_inner = xi_i[1:-1] #visi iņemot 1. un pēdējo xi_i
+M = len(xi_inner)  # Nezināmo skaits: 2N - 1
 
-for i in range(dim):
-    H[i, i] = coeff + 0.5 * (xi[i] ** 2)
-    if i > 0:
-        H[i, i - 1] = -0.5 * coeff
-    if i < dim - 1:
-        H[i, i + 1] = -0.5 * coeff
+# izmantojam galīgo diferenču formulu, lai noteiktu ieguldījuma koeficientus
+kinetic_center = 1.0 / (xi_max/N)**2  #reizina psi_i
+kinetic_neighbor = -1.0 / (2.0 * (xi_max/N)**2)  #reizina psi_i-1 un psi_i+1
 
-# 4. Matricas diagonalizācija
+# pēc diskretizācijas iegūta ipvert problēma Hpsi=Epsi
+H = np.zeros((M, M))  #H matrica M*M
+
+# H diag ir kin un pot ieguldījums, tieši blakus psi_i+-1
+for j in range(M):
+    # Potenciāls attiecīgajā iekšējā režģa punktā
+    potential = xi_inner[j]**2 / 2.0
+
+    # Galvenā diagonāle
+    H[j, j] = kinetic_center + potential
+
+    # Elementi tieši virs un zem galvenās diagonāles
+    if j < M - 1:
+        H[j, j + 1] = kinetic_neighbor
+        H[j + 1, j] = kinetic_neighbor
+
+# iegūstam īp-energ un īp-vekt
 eigenvalues, eigenvectors = np.linalg.eigh(H)
 
-# 5. Viļņu funkciju normēšana
-for n in range(5):
-    norm_factor = np.sqrt(np.sum(eigenvectors[:, n] ** 2) * dxi)
-    eigenvectors[:, n] /= norm_factor
+eigenvalues5 = eigenvalues[:5]  #pirmās 5 eigenvalues
+n = np.arange(5)
 
-# 6. 4. uzdevums: Viļņu funkciju zīmēšana ar skalēšanu, lai tās nepārklātos
-plt.figure(figsize=(8, 9))
+# rēķinām īp-f-jas
+psi = np.zeros((2 * N + 1, M)) # Katra rinda - koordināta, kolonna - H matricas īp-vektori bez galap-tiem
 
-scale_factor = 0.4  # Skalēšanas koeficients, kas samazina viļņu funkcijas vertikālo izmēru
+# eigh īpašvektoriem summa |v_i|^2 = 1, tāpēc integrāļa normalizācijai dalām ar sqrt(h)
+psi[1:-1, :] = eigenvectors / np.sqrt(xi_max / N)
 
-for n in range(5):
-    offset = eigenvalues[n]
-    # Reizinām viļņu funkciju ar scale_factor un pieskaitām enerģijas līmeni (offset)
-    plt.plot(xi, scale_factor * eigenvectors[:, n] + offset, label=f'n = {n}, $\\varepsilon$ = {eigenvalues[n]:.3f}')
-    
-    # Bāzes līnija attiecīgajai enerģijai
-    plt.axhline(y=offset, color='gray', linestyle='--', linewidth=0.7)
+psi_0 = psi[:, 0]  #pamatstāvokļa viļņu funkcija
+psi5 = psi[:, :5]  #pirmās 5 īp-f-jas atrodas kolonnas
 
-plt.title("Harmoniskā oscilatora viļņu funkcijas")
-plt.xlabel("Koordināta $\\xi$")
-plt.ylabel("Skalēta $\\psi_n(\\xi) + \\varepsilon_n$")
-plt.xlim(-xi_max, xi_max)
-plt.legend(loc='upper right')
-plt.grid(True)
+A = 0.5  # viļņu funkciju attēlojuma amplitūdas mērogs
+
+for j in n:
+    plt.plot(
+        xi_i,
+        eigenvalues5[j] + A * psi5[:, j],
+        label=f"n = {j}, ε = {eigenvalues5[j]:.3f}"
+    )
+    plt.axhline(
+        eigenvalues5[j],
+        color="black",
+        linestyle="--",
+        linewidth=0.7
+    )
+
+plt.xlabel("Bezdimensiju koordināta ξ")
+plt.ylabel("εₙ + Aψₙ(ξ)")
+plt.legend()
+plt.grid()
 plt.show()

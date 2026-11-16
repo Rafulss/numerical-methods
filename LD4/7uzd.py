@@ -1,62 +1,64 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Dotie dati slāpekļa molekulai (N2)
-# De dots viļņu skaitļos (cm^-1), pārvēršam uz SI vai izmantojam atbilstošas konstantes
-De_cm = 79890.0  # cm^-1
-k_angstrom = 2.6889  # A^-1
-k_si = k_angstrom * 1e10  # m^-1
+N = 1000
+xi_max = 5
 
-# Konstantes
-c = 2.99792458e10  # gaismas ātrums cm/s
-h = 6.62607015e-34  # J s
-hbar = h / (2 * np.pi)
-m_N = 14.0031 * 1.66054e-27  # viena N atoma masa kg
-mu = m_N / 2.0  # reducētā masa kg
+# Fizikālās konstantes SI vienībās
+hbar = 1.054571817e-34  # J·s
+h_planck = 2 * np.pi * hbar
+c_light = 299792458    # m/s
+u = 1.66053906660e-27  # kg
 
-# Pārvēršam De uz Džouliem (J), lai sakārtotu mērogus
-# E_h = h * c * De (ja izmanto cm^-1)
-# Bet bezdimensionālajā formā mēs varam izteikt potenciālu attiecībā pret \hbar \omega
-# Aprēķinām omega harmoniskajam tuvinājumam Morzes potenciālam:
-# omega = k * sqrt(2 * De_dzouli / mu)
-# De izteiksme enerģijas vienībās: De (J) = De_cm * h * c (precizējot vienības)
-De_J = De_cm * 100 * h * c  # cm^-1 uz m^-1 un tad uz J
+# Morzes potenciāla parametri SI vienībās
+D_e = h_planck * c_light * (79890 * 100)  # cm⁻¹ -> m⁻¹ -> J
+k = 2.6889 * 1e10                        # Å⁻¹ -> m⁻¹
 
-omega = k_si * np.sqrt(2.0 * De_J / mu)
+# Slāpekļa atoma masa (aptuveni 14 u) un reducētā masa
+m = 14.0 * u
+mu = m / 2
 
-# Bezdimensionālais parametrs Morzes potenciālam režģī:
-# V_M(xi) / (hbar * omega) izteiksme:
-# Tā kā x = xi * sqrt(hbar / (mu * omega)), tad kx = xi * k * sqrt(hbar / (mu * omega))
-alpha_param = k_si * np.sqrt(hbar / (mu * omega))
-lambda_m = np.sqrt(2 * De_J / (hbar * omega))  # Bieži sastopams Morzes parametrs
+# Frekvence un mērogi
+omega = k * np.sqrt(2 * D_e / mu)
+x0 = np.sqrt(hbar / (mu * omega))  # garuma mērogs, m
+E0 = hbar * omega                 # enerģijas mērogs, J
 
-# Režģa parametri
-N = 150
-xi_max = 8.0
-i = np.linspace(-N, N, 2 * N + 1)
-xi = i * xi_max / N
-d_xi = xi_max / N
 
-xi_int = xi[1:-1]
-n_int = len(xi_int)
+i = np.linspace(-N, N, 2*N+1) #norādu cik daudz vērtības gribu
+xi_i = i * xi_max / N  #definēju koordinātas
 
-# Morzes potenciāls bezdimensionālā formā: V_M(xi) / (hbar * omega)
-# Izmantojot saistību: V_M / (hbar * omega) = (lambda_m^2 / 2) * (1 - exp(-alpha_param * xi))^2 
-# vai vienkāršāk caur D_e un \hbar \omega:
-V_morse_dimensionless = (De_J / (hbar * omega)) * (1.0 - np.exp(-alpha_param * xi_int))**2
+# definējam xi bez gala punktiem, jo tur psi=0
+xi_inner = xi_i[1:-1] #visi iņemot 1. un pēdējo xi_i
+M = len(xi_inner)  # Nezināmo skaits: 2N - 1
 
-# Hamiltona matrica Morzes potenciālam
-H_morse = np.zeros((n_int, n_int))
-diag_val = 1.0 / (d_xi ** 2) + V_morse_dimensionless
-off_diag_val = -1.0 / (2.0 * d_xi ** 2)
+# izmantojam galīgo diferenču formulu, lai noteiktu ieguldījuma koeficientus
+kinetic_center = 1.0 / (xi_max/N)**2  #reizina psi_i
+kinetic_neighbor = -1.0 / (2.0 * (xi_max/N)**2)  #reizina psi_i-1 un psi_i+1
 
-np.fill_diagonal(H_morse, diag_val)
-np.fill_diagonal(H_morse[1:], off_diag_val)
-np.fill_diagonal(H_morse[:, 1:], off_diag_val)
+# pēc diskretizācijas iegūta ipvert problēma Hpsi=Epsi
+H = np.zeros((M, M))  #H matrica M*M
 
-# Diagonalizācija
-eigenvalues_morse, _ = np.linalg.eigh(H_morse)
+# H diag ir kin un pot ieguldījums, tieši blakus psi_i+-1
+for j in range(M):
+    # Potenciāls attiecīgajā iekšējā režģa punktā
+    # x = x0 * xi; potenciālu dalām ar E0
+    potential = (D_e / E0) * (
+        1 - np.exp(-k * x0 * xi_inner[j])
+    )**2
 
-print("Pirmās 5 īpašenerģijas Morzes potenciālam ($\epsilon_n$):")
-for idx in range(5):
-    print(f"n = {idx}: {eigenvalues_morse[idx]:.6f}  (Harmoniskajam: {idx + 0.5})")
+    # Galvenā diagonāle
+    H[j, j] = kinetic_center + potential
+
+    # Elementi tieši virs un zem galvenās diagonāles
+    if j < M - 1:
+        H[j, j + 1] = kinetic_neighbor
+        H[j + 1, j] = kinetic_neighbor
+
+# iegūstam īpenerg un īpvekt
+eigenvalues, eigenvectors = np.linalg.eigh(H)
+
+for n in range(5):
+    print(f"n = {n}, epsilon = {eigenvalues[n]:.8f}")
+
+# 3.uzd 5 mazākās eigenvalues
+print("5 mazākās īpašvērtības:", eigenvalues[:5])
